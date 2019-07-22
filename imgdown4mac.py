@@ -118,7 +118,6 @@ if __name__ == "__main__":
 
         # 저장될 위치(권) 디렉토리 생성
         if not os.path.isdir(base_path + '/' + vol_nm):
-            print(vol_nm)
             os.mkdir(base_path + '/' + vol_nm)
 
             pi = get_page_info(vol_url, 'img')  # 페이지 정보 가져오기
@@ -128,6 +127,7 @@ if __name__ == "__main__":
                 j.append(vol_nm)
                 j.append(base_path + '/' + vol_nm + '/' + page_nm)
                 all_info.append(j)
-        
+    
+    # print(all_info)
     pool.map(save_img, all_info)
     pool.close()
