@@ -2,105 +2,139 @@
 # -*- coding: utf-8 -*-
 
 """
-웹크롤링으로 이미지 다운 for https://eguru.tumblr.com
+웹크롤링 이미지 다운(https://eguru.tumblr.com 용)
+특정 사이트를 기준으로 웹크롤링을 하기 때문에 다른 사이트 용으로 변경하기 위해선 해당 사이트 소스를 분석해서 적용해야함
 """
 
 from bs4 import BeautifulSoup
 
-# import multiprocessing
+import multiprocessing
 import urllib.request
 import urllib.parse
 import re
 import os
 import pickle
+import copy
 
-def get_source_code(url):
+
+def get_htlm(url):
     """
-    소스코드 가져오기
     """
     with urllib.request.urlopen(url) as response:
         html = response.read()
         soup = BeautifulSoup(html, 'html.parser')
+        soup.prettify()
 
     return soup
 
+def save_data_info(path, filename, content):
+    '''
+        정보 저장
+        파이썬 객체 형태로도 저장하고, 사람이 읽기 쉬운 형태로도 저장
+    '''
+    if path and filename and content:
+        if not os.path.exists(path):
+            os.mkdir(path)
+
+        if not os.path.exists(path + '/' + filename + '.pickle'):
+            with open(path + '/' + filename + '.pickle', 'wb') as f:
+                pickle.dump(content, f)
+
+        if not os.path.exists(path + '/' + filename + '.txt'):
+            with open(path + '/' + filename + '.txt', 'w') as f:
+                for c in content:
+                    f.writelines(c[0] + '\t' + c[1] + '\n')
+
+
+def get_data_info(path, filename):
+    '''
+        저장된 파이썬 객체 가져오기
+    '''
+    content = list()
+    full_path = path + '/' + filename + '.pickle'
+
+    if os.path.exists(full_path):
+        with open(full_path, 'rb') as f:
+            content = pickle.load(f)
+
+    return content
+
+
+def save_img(page_info):
+    """
+    page_info(이미지 url과 경로에 관한 정보를 담은 리스트)를 이용하여 이미지를 특정 위치에 저장한다. 
+    params:
+        page_info : 특정 페이지의 파일이름, url 주소 및 저장될 위치를 갖는 리스트
+    """
+    page_nm = page_info[0]
+    page_url = page_info[1]
+    path = page_info[2]
+
+    full_path = path + '/' + page_nm
+    
+    if not os.path.exists(full_path):        # 해당 파일이 존재하지 않을때만 저장
+        urllib.request.urlretrieve(page_url, full_path)
+        print('    ', full_path, 'Saved')
+    else:
+        print('    ', full_path, 'Already Existed')
+    
+    
 
 if __name__ == "__main__":
+    base_url, comicbook_nm = "https://eguru.tumblr.com", "one-piece" 
+    dst_url = base_url + "/" + urllib.parse.quote_plus(comicbook_nm)
 
-    main_url = "https://eguru.tumblr.com"
-    book_nm = "one-piece"    # one-piece / 데스노트 등등
-    dst_url = main_url + "/" + urllib.parse.quote_plus(book_nm)
+    path = "/Users/chex2tah/Downloads/" + comicbook_nm
+    filename = comicbook_nm + ' info'
 
-    book_vol_info = list()
+    vol_info = list()
+    if not os.path.exists(path + '/' + filename + '.pickle'):
+        soup = get_htlm(dst_url)
+        a_tag_list = soup.select('.body-text p a[target="_blank"]') # 분석해서 가져온 a태그 리스트
+        
+        for i in a_tag_list:
+            vol_nm, vol_url = i.text.replace('/','_'), i['href']    # 책 낱권의 이름, 정보(url)
+            vol_info.append([vol_nm, base_url + vol_url])
 
-
-    dirPath = book_nm
-    if not os.path.exists(dirPath):
-        os.mkdir(dirPath)
-
-    if os.path.exists(dirPath + '/' + '[' + book_nm + ']' + ' comicbook_info.pickle'):
-        print('파일에서 읽음')
-        with open(dirPath + '/' + '[' + book_nm + ']' + ' comicbook_info.pickle', 'rb') as f:
-            book_vol_info = pickle.load(f)
+        save_data_info(path, filename, vol_info)
     else:
-        print('웹 크롤링')
-        html_src = get_source_code(dst_url)
-        a_tag = html_src.find_all("a", attrs={"target":"_blank"})   # <a> 태그 내역 가져오기
-
-        for i in a_tag:
-            a_href, a_text = i['href'], i.text  # <a> 태그의 href 속성 값, text 값
-            if '/post/' in a_href:
-                book_vol_info.append([a_text, main_url + a_href])
-
-        with open(dirPath + '/' + '[' + book_nm + ']' + ' comicbook_info.pickle', 'wb') as f:
-            pickle.dump(book_vol_info, f)
-
-
-    if not os.path.exists(dirPath + '/' + '[' + book_nm + ']' + ' comicbook_info.txt'):
-        with open(dirPath + '/' + '[' + book_nm + ']' + ' comicbook_info.txt', 'w') as f:
-            f.writelines('name' + '\t' + 'url' +'\n')
-            for i in book_vol_info:
-                f.writelines(i[0] + '\t' + i[1] +'\n')
-                    
+        vol_info = get_data_info(path, filename)
 
     
-    for i in book_vol_info:
-        book_vol_nm = i[0]
-        book_vol_url = i[1]
+    pool = multiprocessing.Pool(processes=4)    # 멀티프로세싱을 위해 선언
 
-        if not os.path.exists(dirPath + '/' + book_vol_nm.replace('/','_') + '/'):
+    for v in vol_info:
+        vol_nm, vol_url = v[0], v[1]    # 책 낱권의 이름, 정보(url)
+        vol_soup = get_htlm(vol_url)
 
-            print('[{}] 페이지 정보 가져오기 시작'.format(book_vol_nm))
-            if not os.path.exists(dirPath + '/' + book_vol_nm.replace('/','_') + '/'):
-                os.mkdir(dirPath + '/' + book_vol_nm.replace('/','_') + '/')
+        img_tag_list = vol_soup.select('.body-text img[alt="image"]') # 분석해서 가져온 img태그 리스트
 
-            book_vol_src = get_source_code(book_vol_url)
-
-            img_tag = book_vol_src.find_all("img", attrs={"alt":"image"}, src=re.compile(r"https.+?.jpg"))
-
-            page_info = list()
-            for i in img_tag:
+        page_info = list()
+        for i in img_tag_list:
+            try:
+                page_img, page_img_nm = i['data-orig-src'], ''
+            except KeyError as e:
+                print('KeyError : {}'.format(e))
                 try:
-                    page_url = i['data-orig-src']
-                except KeyError as e:
-                    print('KeyError : {}'.format(e))
-                    try:
-                        page_url = i['src']
-                    except KeyError as e2:
-                        print('KeyError : {}'.format(e2))
-                
+                    page_img, page_img_nm = i['src'], ''
+                except KeyError as e2:
+                    print('KeyError : {}'.format(e2))
 
-                regexp = re.compile(r'(?<=\/)[\d\w-]+?\.jpg')
-                page_nm = regexp.search(str(page_url)).group()
+            rst = re.search(r'(?<=\/)[\d\w-]+\.jpg', page_img)
+            if rst:
+                page_img_nm = rst.group()
 
-                print(page_nm, page_url)
-                page_info.append([page_nm, page_url])
+            page_info.append([page_img_nm, page_img, path + '/' + vol_nm])
 
+        
+        if not os.path.exists(path + '/' + vol_nm):
+            os.mkdir(path + '/' + vol_nm)
 
-            if page_info:
-                if not os.path.exists(dirPath + '/' + book_vol_nm.replace('/','_') + '/' + '[' + book_vol_nm.replace('/','_') + ']' + ' page_info.txt'):
-                    with open(dirPath + '/' + book_vol_nm.replace('/','_') + '/' + '[' + book_vol_nm.replace('/','_') + ']' + ' page_info.txt', 'w') as f:
-                        f.writelines('name' + '\t' + 'url' +'\n')
-                        for i in page_info:
-                            f.writelines(i[0] + '\t' + i[1] +'\n')
-                            
+        print(vol_nm, '저장 시작!')
+        pool.map(save_img, page_info)
+        print(vol_nm, '저장 완료!\n')
+
+        # break   # 1권만 가져오도록 break 처리
+
+    pool.close()
+    
