@@ -68,32 +68,39 @@ if __name__ == "__main__":
         book_vol_nm = i[0]
         book_vol_url = i[1]
 
-        print('[{}] 페이지 정보 가져오기 시작'.format(book_vol_nm))
+        if not os.path.exists(dirPath + '/' + book_vol_nm.replace('/','_') + '/'):
 
-        book_vol_src = get_source_code(book_vol_url)
+            print('[{}] 페이지 정보 가져오기 시작'.format(book_vol_nm))
+            if not os.path.exists(dirPath + '/' + book_vol_nm.replace('/','_') + '/'):
+                os.mkdir(dirPath + '/' + book_vol_nm.replace('/','_') + '/')
 
-        img_tag = book_vol_src.find_all("img", attrs={"alt":"image"}, src=re.compile(r"https.+?.jpg"))
+            book_vol_src = get_source_code(book_vol_url)
 
-        page_info = list()
-        for i in img_tag:
-            page_url = i['data-orig-src']
+            img_tag = book_vol_src.find_all("img", attrs={"alt":"image"}, src=re.compile(r"https.+?.jpg"))
 
-            regexp = re.compile(r'(?<=\/)[\d\w]+?\.jpg')
-            page_nm = regexp.search(str(page_url)).group()
+            page_info = list()
+            for i in img_tag:
+                try:
+                    page_url = i['data-orig-src']
+                except KeyError as e:
+                    print('KeyError : {}'.format(e))
+                    try:
+                        page_url = i['src']
+                    except KeyError as e2:
+                        print('KeyError : {}'.format(e2))
+                
 
-            print(page_nm, page_url)
-            page_info.append([page_nm, page_url])
+                regexp = re.compile(r'(?<=\/)[\d\w-]+?\.jpg')
+                page_nm = regexp.search(str(page_url)).group()
+
+                print(page_nm, page_url)
+                page_info.append([page_nm, page_url])
 
 
-        # if not os.path.exists(dirPath + '/' + '[' + book_nm + ']' + ' comicbook_info.txt'):
-        #     with open(dirPath + '/' + '[' + book_nm + ']' + ' comicbook_info.txt', 'w') as f:
-        #         f.writelines('name' + '\t' + 'url' +'\n')
-        #         for i in book_vol_info:
-        #             f.writelines(i[0] + '\t' + i[1] +'\n')
-                        
-
-
-        break
- 
-
-    
+            if page_info:
+                if not os.path.exists(dirPath + '/' + book_vol_nm.replace('/','_') + '/' + '[' + book_vol_nm.replace('/','_') + ']' + ' page_info.txt'):
+                    with open(dirPath + '/' + book_vol_nm.replace('/','_') + '/' + '[' + book_vol_nm.replace('/','_') + ']' + ' page_info.txt', 'w') as f:
+                        f.writelines('name' + '\t' + 'url' +'\n')
+                        for i in page_info:
+                            f.writelines(i[0] + '\t' + i[1] +'\n')
+                            
